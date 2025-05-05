@@ -1021,19 +1021,46 @@ public extension WhisperTokenizer {
         let probability: Float
     }
 
-    public struct Segment {
+    public struct Segment:  CustomStringConvertible, CustomDebugStringConvertible {
+        
         var start: Float
         var end: Float
         var tokens: [Rank]
         var words: [Word]
         let seek: Int
 
-        struct Word {
+        struct Word :  CustomStringConvertible, CustomDebugStringConvertible {
             let word: String
             var start: Float
             var end: Float
             let probability: Float
+            
+            var description: String {
+                return "\(word): \(start) - \(end)"
+            }
+
+            var debugDescription: String {
+                return "Word(word: \"\(word)\", start: \(start), end: \(end), probability: \(probability))"
+            }
+            
         }
+        
+        public var description: String {
+               var result = "Segment (\(start) - \(end)):\n"
+               for word in words {
+                   result += "  \(word.description)\n"
+               }
+               return result
+           }
+
+       public var debugDescription: String {
+           var result = "Segment(start: \(start), end: \(end), seek: \(seek), tokens: \(tokens.count), words: \(words.count))\n"
+           result += "Words:\n"
+           for word in words {
+               result += "  \(word.debugDescription)\n"
+           }
+           return result
+       }
     }
 
     func addWordTimestamps(
@@ -1674,4 +1701,27 @@ extension WhisperTokenizer.Segment {
 
         return String(format: "%02.0f:%02.0f:%02.0f,%03.0f", hours, minutes, seconds, milliseconds)
     }
+}
+
+public func printSegments(_ segments: [WhisperTokenizer.Segment]) {
+    for (index, segment) in segments.enumerated() {
+        print("Segment \(index) (\(segment.start) - \(segment.end)):")
+        for word in segment.words {
+            print("  \(word.word): \(word.start) - \(word.end)")
+        }
+        if index < segments.count - 1 {
+            print()
+        }
+    }
+}
+
+public func debugPrintSegments(_ segments: [WhisperTokenizer.Segment]) {
+    print("[")
+    for (index, segment) in segments.enumerated() {
+        print("  \(segment.debugDescription)")
+        if index < segments.count - 1 {
+            print()
+        }
+    }
+    print("]")
 }
