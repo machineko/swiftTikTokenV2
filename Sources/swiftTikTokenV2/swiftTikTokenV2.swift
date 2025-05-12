@@ -1019,28 +1019,30 @@ public extension WhisperTokenizer {
         var start: Float
         var end: Float
         let probability: Float
+        let entropy: Float
     }
 
     public struct Segment:  CustomStringConvertible, CustomDebugStringConvertible {
         
-        var start: Float
-        var end: Float
-        var tokens: [Rank]
-        var words: [Word]
-        let seek: Int
+        public var start: Float
+        public var end: Float
+        public var tokens: [Rank]
+        public var words: [Word]
+        public let seek: Int
 
-        struct Word :  CustomStringConvertible, CustomDebugStringConvertible {
-            let word: String
-            var start: Float
-            var end: Float
-            let probability: Float
+        public struct Word :  CustomStringConvertible, CustomDebugStringConvertible {
+            public let word: String
+            public var start: Float
+            public var end: Float
+            public let probability: Float
+            public let entropy: Float
             
-            var description: String {
+            public var description: String {
                 return "\(word): \(start) - \(end)"
             }
 
-            var debugDescription: String {
-                return "Word(word: \"\(word)\", start: \(start), end: \(end), probability: \(probability))"
+            public var debugDescription: String {
+                return "Word(word: \"\(word)\", start: \(start), end: \(end), probability: \(probability), entropy: \(entropy))"
             }
             
         }
@@ -1133,7 +1135,8 @@ public extension WhisperTokenizer {
                             word: timing.word,
                             start: round(wordStart * 100) / 100,
                             end: round(wordEnd * 100) / 100,
-                            probability: timing.probability
+                            probability: timing.probability,
+                            entropy: timing.entropy
                         ))
                 }
 
@@ -1242,10 +1245,13 @@ extension WhisperTokenizer {
         let probabilities: [Float]
     }
 
+    
     func findWordAlignments(
         textTokens: [Rank],
         text_indices: [Int],
-        time_indices: [Int]
+        time_indices: [Int],
+        tokenProbabilities: [Float],  // Token probabilities from Whisper
+        tokenEntropies: [Float]       // Token entropies from Whisper
     ) throws -> [WordTiming] {
         var tokensWithEot = textTokens
         if let eotToken = specialTokens["<|endoftext|>"] {
@@ -1274,8 +1280,24 @@ extension WhisperTokenizer {
             .filter { $0.0 }
             .map { Float($0.1) / TOKENS_PER_SECOND }
 
+        // Create arrays to store token probabilities and entropies at jump points
+        var jumpProbabilities: [Float] = []
+        var jumpEntropies: [Float] = []
+        var probIndex = 0
+
+        for isJump in jumps {
+            if isJump && probIndex < tokenProbabilities.count && probIndex < tokenEntropies.count {
+                jumpProbabilities.append(tokenProbabilities[probIndex])
+                jumpEntropies.append(tokenEntropies[probIndex])
+                probIndex += 1
+            }
+        }
+
         var startTimes: [Float] = []
         var endTimes: [Float] = []
+        var wordProbabilities: [Float] = []
+        var wordEntropies: [Float] = []
+
         for i in 0..<(wordBoundaries.count - 1) {
             let startIdx = wordBoundaries[i]
             let endIdx = wordBoundaries[i + 1]
@@ -1286,10 +1308,26 @@ extension WhisperTokenizer {
 
             startTimes.append(jumpTimes[startIdx])
             endTimes.append(jumpTimes[endIdx])
+
+            if startIdx < jumpProbabilities.count && endIdx <= jumpProbabilities.count {
+                let tokenProbs = Array(jumpProbabilities[startIdx..<endIdx])
+                let wordProb = tokenProbs.isEmpty ? 1.0 : tokenProbs.reduce(0, +) / Float(tokenProbs.count)
+                wordProbabilities.append(wordProb)
+            } else {
+                fatalError("No probability data available")
+            }
+
+            if startIdx < jumpEntropies.count && endIdx <= jumpEntropies.count {
+                let tokenEnts = Array(jumpEntropies[startIdx..<endIdx])
+                let wordEnt = tokenEnts.isEmpty ? 0.0 : tokenEnts.reduce(0, +) / Float(tokenEnts.count)
+                wordEntropies.append(wordEnt)
+            } else {
+                fatalError("No entropy data available")
+            }
         }
 
         var results: [WordTiming] = []
-        for i in 0..<min(words.count, startTimes.count) {
+        for i in 0..<min(words.count, startTimes.count, wordProbabilities.count, wordEntropies.count) {
             guard i < endTimes.count && i < wordTokens.count else {
                 break
             }
@@ -1300,7 +1338,8 @@ extension WhisperTokenizer {
                     tokens: wordTokens[i],
                     start: startTimes[i],
                     end: endTimes[i],
-                    probability: 1
+                    probability: wordProbabilities[i],
+                    entropy: wordEntropies[i]
                 ))
         }
 
@@ -1314,7 +1353,9 @@ extension WhisperTokenizer {
         prependPunctuations: String = "\"'“¿([{-",
         appendPunctuations: String = "\"'.。,，!！?？:：”)]}、",
         text_indices: [Int],
-        time_indices: [Int]
+        time_indices: [Int],
+        probabilities: [Float32],
+        tokenEntropies: [Float32]
     ) throws {
         guard !segments.isEmpty else { return }
 
@@ -1327,7 +1368,9 @@ extension WhisperTokenizer {
         var alignment = try findWordAlignments(
             textTokens: textTokens,
             text_indices: text_indices,
-            time_indices: time_indices
+            time_indices: time_indices,
+            tokenProbabilities: probabilities,
+            tokenEntropies: tokenEntropies
         )
 
         let wordDurations = alignment.map { $0.end - $0.start }
@@ -1371,7 +1414,8 @@ extension WhisperTokenizer {
                             word: timing.word,
                             start: round((timeOffset + timing.start) * 100) / 100,
                             end: round((timeOffset + timing.end) * 100) / 100,
-                            probability: timing.probability
+                            probability: timing.probability,
+                            entropy: timing.entropy
                         )
                     )
                 }
