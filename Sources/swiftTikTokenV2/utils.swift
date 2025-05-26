@@ -67,7 +67,7 @@ public enum DTWError: Error {
 
 public struct DTW {
     public init() {
-        
+
     }
     func backtrace(trace: [Float], N: Int, M: Int) -> (text_indices: [Int], time_indices: [Int]) {
         var i = N
@@ -188,7 +188,6 @@ struct AttentionMaskKernel {
         encoder.endEncoding()
     }
 }
-
 
 extension ComplexHalf {
     static func makeBuffer(device: MTLDevice, count: Int) -> MTLBuffer? {

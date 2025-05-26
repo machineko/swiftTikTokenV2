@@ -337,7 +337,6 @@ public struct CoreBPE {
         return tokens
     }
 
-
     func decode(_ tokens: [Rank]) throws -> Data {
         var result = Data()
         for token in tokens {
@@ -601,8 +600,8 @@ struct LanguageData: Codable {
 }
 
 @available(macOS 13.0, *)
-public extension CoreBPE {
-    func debugToken(_ data: Data) {
+extension CoreBPE {
+    public func debugToken(_ data: Data) {
         print("Debugging token:", data.map { String(format: "%02x", $0) }.joined())
         if let rank = encoder[data] {
             print("Found rank:", rank)
@@ -1012,7 +1011,7 @@ extension WhisperTokenizer {
     }
 }
 
-public extension WhisperTokenizer {
+extension WhisperTokenizer {
     public struct WordTiming {
         var word: String
         var tokens: [Rank]
@@ -1022,21 +1021,21 @@ public extension WhisperTokenizer {
         let entropy: Float
     }
 
-    public struct Segment:  CustomStringConvertible, CustomDebugStringConvertible {
-        
+    public struct Segment: CustomStringConvertible, CustomDebugStringConvertible {
+
         public var start: Float
         public var end: Float
         public var tokens: [Rank]
         public var words: [Word]
         public let seek: Int
 
-        public struct Word :  CustomStringConvertible, CustomDebugStringConvertible {
+        public struct Word: CustomStringConvertible, CustomDebugStringConvertible {
             public let word: String
             public var start: Float
             public var end: Float
             public let probability: Float
             public let entropy: Float
-            
+
             public var description: String {
                 return "\(word): \(start) - \(end)"
             }
@@ -1044,28 +1043,28 @@ public extension WhisperTokenizer {
             public var debugDescription: String {
                 return "Word(word: \"\(word)\", start: \(start), end: \(end), probability: \(probability), entropy: \(entropy))"
             }
-            
-        }
-        
-        public var description: String {
-               var result = "Segment (\(start) - \(end)):\n"
-               for word in words {
-                   result += "  \(word.description)\n"
-               }
-               return result
-           }
 
-       public var debugDescription: String {
-           var result = "Segment(start: \(start), end: \(end), seek: \(seek), tokens: \(tokens.count), words: \(words.count))\n"
-           result += "Words:\n"
-           for word in words {
-               result += "  \(word.debugDescription)\n"
-           }
-           return result
-       }
+        }
+
+        public var description: String {
+            var result = "Segment (\(start) - \(end)):\n"
+            for word in words {
+                result += "  \(word.description)\n"
+            }
+            return result
+        }
+
+        public var debugDescription: String {
+            var result = "Segment(start: \(start), end: \(end), seek: \(seek), tokens: \(tokens.count), words: \(words.count))\n"
+            result += "Words:\n"
+            for word in words {
+                result += "  \(word.debugDescription)\n"
+            }
+            return result
+        }
     }
 
-    func addWordTimestamps(
+    public func addWordTimestamps(
         segments: inout [Segment],
         alignment: inout [WordTiming],
         prependPunctuations: String = "\"'“¿([{-",
@@ -1178,7 +1177,7 @@ public extension WhisperTokenizer {
         }
     }
 
-    func mergePunctuations(
+    public func mergePunctuations(
         alignment: inout [WordTiming],
         prepended: String,
         appended: String
@@ -1234,6 +1233,381 @@ extension Array where Element: Comparable {
         return self[count / 2]
     }
 }
+//
+//extension WhisperTokenizer {
+//    struct AlignmentResult {
+//        let words: [String]
+//        let wordTokens: [[Rank]]
+//        let wordBoundaries: [Int]
+//        let startTimes: [Float]
+//        let endTimes: [Float]
+//        let probabilities: [Float]
+//    }
+//
+//
+//    func findWordAlignments(
+//        textTokens: [Rank],
+//        text_indices: [Int],
+//        time_indices: [Int],
+//        tokenProbabilities: [Float],  // Token probabilities from Whisper
+//        tokenEntropies: [Float]       // Token entropies from Whisper
+//    ) throws -> [WordTiming] {
+//        var tokensWithEot = textTokens
+//        if let eotToken = specialTokens["<|endoftext|>"] {
+//            tokensWithEot.append(eotToken)
+//        }
+//
+//        let (words, wordTokens) = splitToWordTokens(tokensWithEot)
+//
+//        guard wordTokens.count > 1 else {
+//            return []
+//        }
+//
+//        var wordBoundaries = [0]
+//        var cumsum = 0
+//        for tokens in wordTokens.dropLast() {
+//            cumsum += tokens.count
+//            wordBoundaries.append(cumsum)
+//        }
+//
+//        var jumps = [true]
+//        for i in 1..<text_indices.count {
+//            jumps.append(text_indices[i] != text_indices[i - 1])
+//        }
+//
+//        let jumpTimes = zip(jumps, time_indices)
+//            .filter { $0.0 }
+//            .map { Float($0.1) / TOKENS_PER_SECOND }
+//
+//        // Create arrays to store token probabilities and entropies at jump points
+//        var jumpProbabilities: [Float] = []
+//        var jumpEntropies: [Float] = []
+//        var probIndex = 0
+//
+//        for isJump in jumps {
+//            if isJump && probIndex < tokenProbabilities.count && probIndex < tokenEntropies.count {
+//                jumpProbabilities.append(tokenProbabilities[probIndex])
+//                jumpEntropies.append(tokenEntropies[probIndex])
+//                probIndex += 1
+//            }
+//        }
+//
+//        var startTimes: [Float] = []
+//        var endTimes: [Float] = []
+//        var wordProbabilities: [Float] = []
+//        var wordEntropies: [Float] = []
+//
+//        for i in 0..<(wordBoundaries.count - 1) {
+//            let startIdx = wordBoundaries[i]
+//            let endIdx = wordBoundaries[i + 1]
+//
+//            guard startIdx < jumpTimes.count && endIdx < jumpTimes.count else {
+//                continue
+//            }
+//
+//            startTimes.append(jumpTimes[startIdx])
+//            endTimes.append(jumpTimes[endIdx])
+//
+//            if startIdx < jumpProbabilities.count && endIdx <= jumpProbabilities.count {
+//                let tokenProbs = Array(jumpProbabilities[startIdx..<endIdx])
+//                let wordProb = tokenProbs.isEmpty ? 1.0 : tokenProbs.reduce(0, +) / Float(tokenProbs.count)
+//                wordProbabilities.append(wordProb)
+//            } else {
+//                fatalError("No probability data available")
+//            }
+//
+//            if startIdx < jumpEntropies.count && endIdx <= jumpEntropies.count {
+//                let tokenEnts = Array(jumpEntropies[startIdx..<endIdx])
+//                let wordEnt = tokenEnts.isEmpty ? 0.0 : tokenEnts.reduce(0, +) / Float(tokenEnts.count)
+//                wordEntropies.append(wordEnt)
+//            } else {
+//                fatalError("No entropy data available")
+//            }
+//        }
+//
+//        var results: [WordTiming] = []
+//        for i in 0..<min(words.count, startTimes.count, wordProbabilities.count, wordEntropies.count) {
+//            guard i < endTimes.count && i < wordTokens.count else {
+//                break
+//            }
+//
+//            results.append(
+//                WordTiming(
+//                    word: words[i],
+//                    tokens: wordTokens[i],
+//                    start: startTimes[i],
+//                    end: endTimes[i],
+//                    probability: wordProbabilities[i],
+//                    entropy: wordEntropies[i]
+//                ))
+//        }
+//
+//        return results
+//    }
+//
+//    public func processSegments(
+//        segments: inout [Segment],
+//        tokenizer: WhisperTokenizer,
+//        numFrames: Int,
+//        prependPunctuations: String = "\"'“¿([{-",
+//        appendPunctuations: String = "\"'.。,，!！?？:：”)]}、",
+//        text_indices: [Int],
+//        time_indices: [Int],
+//        probabilities: [Float32],
+//        tokenEntropies: [Float32]
+//    ) throws {
+//        guard !segments.isEmpty else { return }
+//
+//        let textTokensPerSegment = segments.map { segment in
+//            segment.tokens.filter { $0 < tokenizer.eot }
+//        }
+//
+//        let textTokens = Array(textTokensPerSegment.joined())
+//
+//        var alignment = try findWordAlignments(
+//            textTokens: textTokens,
+//            text_indices: text_indices,
+//            time_indices: time_indices,
+//            tokenProbabilities: probabilities,
+//            tokenEntropies: tokenEntropies
+//        )
+//
+//        let wordDurations = alignment.map { $0.end - $0.start }
+//            .filter { $0 > 0 }
+//
+//        guard !wordDurations.isEmpty else { return }
+//
+//        let medianDuration = min(0.6, Float(wordDurations.sorted()[wordDurations.count / 2]))  // 0.7 vs 0.6 etc.
+//        let maxDuration = medianDuration * 2
+//
+//        let sentenceEndMarks = ".。!！?？"
+//        for i in 1..<alignment.count {
+//            if alignment[i].end - alignment[i].start > maxDuration {
+//                if sentenceEndMarks.contains(alignment[i].word) {
+//                    alignment[i].end = alignment[i].start + maxDuration
+//                } else if sentenceEndMarks.contains(alignment[i - 1].word) {
+//                    alignment[i].start = alignment[i].end - maxDuration
+//                }
+//            }
+//        }
+//
+//        mergePunctuations(
+//            alignment: &alignment,
+//            prepended: prependPunctuations,
+//            appended: appendPunctuations
+//        )
+//
+//        let timeOffset = Float(segments[0].seek) * HOP_LENGTH / Float(SAMPLE_RATE)
+//        var wordIndex = 0
+//        var lastSpeechTimestamp: Float = 0
+//
+//        for (segmentIndex, textTokens) in textTokensPerSegment.enumerated() {
+//            var savedTokens = 0
+//            var words: [Segment.Word] = []
+//
+//            while wordIndex < alignment.count && savedTokens < textTokens.count {
+//                let timing = alignment[wordIndex]
+//                if !timing.word.isEmpty {
+//                    words.append(
+//                        Segment.Word(
+//                            word: timing.word,
+//                            start: round((timeOffset + timing.start) * 100) / 100,
+//                            end: round((timeOffset + timing.end) * 100) / 100,
+//                            probability: timing.probability,
+//                            entropy: timing.entropy
+//                        )
+//                    )
+//                }
+//                savedTokens += timing.tokens.count
+//                wordIndex += 1
+//            }
+//
+//            if !words.isEmpty {
+//                if words[0].end - lastSpeechTimestamp > medianDuration * 4 {
+//                    adjustWordTimingsAfterPause(
+//                        words: &words,
+//                        maxDuration: maxDuration,
+//                        medianDuration: medianDuration
+//                    )
+//                }
+//
+//                adjustSegmentBoundaries(
+//                    segment: &segments[segmentIndex],
+//                    words: &words,
+//                    medianDuration: medianDuration
+//                )
+//
+//                lastSpeechTimestamp = segments[segmentIndex].end
+//            }
+//
+//            segments[segmentIndex].words = words
+//        }
+//    }
+//
+//    private func adjustWordTimingsAfterPause(
+//        words: inout [Segment.Word],
+//        maxDuration: Float,
+//        medianDuration: Float
+//    ) {
+//        if words[0].end - words[0].start > maxDuration || (words.count > 1 && words[1].end - words[0].start > maxDuration * 2) {
+//
+//            if words.count > 1 && words[1].end - words[1].start > maxDuration {
+//                let boundary = max(words[1].end / 2, words[1].end - maxDuration)
+//                words[0].end = boundary
+//                words[1].start = boundary
+//            }
+//            words[0].start = max(0, words[0].end - maxDuration)
+//        }
+//    }
+//
+//    private func adjustSegmentBoundaries(
+//        segment: inout Segment,
+//        words: inout [Segment.Word],
+//        medianDuration: Float
+//    ) {
+//        if segment.start < words[0].end && segment.start - 0.5 > words[0].start {
+//            words[0].start = max(0, min(words[0].end - medianDuration, segment.start))
+//        } else {
+//            segment.start = words[0].start
+//        }
+//
+//        if let lastWord = words.last {
+//            if segment.end > lastWord.start && segment.end + 0.5 < lastWord.end {
+//                words[words.count - 1].end = max(lastWord.start + medianDuration, segment.end)
+//            } else {
+//                segment.end = lastWord.end
+//            }
+//        }
+//    }
+//
+//    public struct SegmentResult {
+//        var tokens: [Int]
+//        var noSpeechProb: Float
+//        var avgLogprob: Float
+//    }
+//
+//    func processAudioSegments(
+//        tokens: [Rank],
+//        tokenizer: WhisperTokenizer,
+//        result: SegmentResult,
+//        timeOffset: Float,
+//        seek: inout Int,
+//        segmentSize: Int,
+//        noSpeechThreshold: Float?,
+//        logprobThreshold: Float?,
+//        timePrecision: Float
+//    ) -> [Segment] {
+//        // Check for no speech
+//        if let noSpeechThreshold = noSpeechThreshold {
+//            var shouldSkip = result.noSpeechProb > noSpeechThreshold
+//
+//            if let logprobThreshold = logprobThreshold,
+//                result.avgLogprob > logprobThreshold
+//            {
+//                shouldSkip = false
+//            }
+//
+//            if shouldSkip {
+//                seek += segmentSize
+//                return []
+//            }
+//        }
+//
+//        var currentSegments: [Segment] = []
+//
+//        // Helper functions
+//        func wordAnomalyScore(_ word: Segment.Word) -> Float {
+//            let duration = word.end - word.start
+//            var score: Float = 0.0
+//
+//            if word.probability < 0.15 {
+//                score += 1.0
+//            }
+//            if duration < 0.133 {
+//                score += (0.133 - duration) * 15
+//            }
+//            if duration > 2.0 {
+//                score += duration - 2.0
+//            }
+//            return score
+//        }
+//
+//        func isSegmentAnomaly(_ segment: Segment?) -> Bool {
+//            guard let segment = segment, !segment.words.isEmpty else { return false }
+//
+//            let punctuation = Set<String>([",", ".", "!", "?", ";", ":", "'", "\""])
+//            let words = segment.words.filter { !punctuation.contains($0.word) }.prefix(8)
+//            let score = words.reduce(0.0) { $0 + wordAnomalyScore($1) }
+//            return score >= 3 || score + 0.01 >= Float(words.count)
+//        }
+//
+//        // Process timestamp tokens
+//        let timestampTokens = tokens.map { $0 >= tokenizer.timestampBegin }
+//        let singleTimestampEnding = timestampTokens.suffix(2) == [false, true]
+//
+//        // Find consecutive timestamps
+//        var consecutive: [Int] = []
+//        for i in 0..<(timestampTokens.count - 1) {
+//            if timestampTokens[i] && timestampTokens[i + 1] {
+//                consecutive.append(i + 1)
+//            }
+//        }
+//
+//        if !consecutive.isEmpty {
+//            var slices = consecutive
+//            if singleTimestampEnding {
+//                slices.append(tokens.count)
+//            }
+//
+//            var lastSlice = 0
+//            for currentSlice in slices {
+//                let slicedTokens = Array(tokens[lastSlice..<currentSlice])
+//                let startTimestampPos = slicedTokens[0] - tokenizer.timestampBegin
+//                let endTimestampPos = slicedTokens.last! - tokenizer.timestampBegin
+//
+//                currentSegments.append(
+//                    Segment(
+//                        start: timeOffset + Float(startTimestampPos) * timePrecision,
+//                        end: timeOffset + Float(endTimestampPos) * timePrecision,
+//                        tokens: Array(slicedTokens),
+//                        words: [],
+//                        seek: seek
+//                    ))
+//
+//                lastSlice = currentSlice
+//            }
+//
+//            if singleTimestampEnding {
+//                seek += segmentSize
+//            } else {
+//                let lastTimestampPos = tokens[lastSlice - 1] - tokenizer.timestampBegin
+//                seek += Int(lastTimestampPos) * Int(HOP_LENGTH * 2)
+//            }
+//        } else {
+//            var duration = Float(segmentSize) * timePrecision
+//            let timestamps = tokens.enumerated().filter { timestampTokens[$0.offset] }.map { $0.element }
+//
+//            if !timestamps.isEmpty && timestamps.last! != tokenizer.timestampBegin {
+//                let lastTimestampPos = timestamps.last! - tokenizer.timestampBegin
+//                duration = Float(lastTimestampPos) * timePrecision
+//            }
+//
+//            currentSegments.append(
+//                Segment(
+//                    start: timeOffset,
+//                    end: timeOffset + duration,
+//                    tokens: tokens,
+//                    words: [],
+//                    seek: seek
+//                ))
+//
+//            seek += segmentSize
+//        }
+//
+//        return currentSegments
+//    }
+//
+//}
 
 extension WhisperTokenizer {
     struct AlignmentResult {
@@ -1245,13 +1619,12 @@ extension WhisperTokenizer {
         let probabilities: [Float]
     }
 
-    
     func findWordAlignments(
         textTokens: [Rank],
         text_indices: [Int],
         time_indices: [Int],
         tokenProbabilities: [Float],  // Token probabilities from Whisper
-        tokenEntropies: [Float]       // Token entropies from Whisper
+        tokenEntropies: [Float]  // Token entropies from Whisper
     ) throws -> [WordTiming] {
         var tokensWithEot = textTokens
         if let eotToken = specialTokens["<|endoftext|>"] {
@@ -1378,7 +1751,7 @@ extension WhisperTokenizer {
 
         guard !wordDurations.isEmpty else { return }
 
-        let medianDuration = min(0.6, Float(wordDurations.sorted()[wordDurations.count / 2]))  // 0.7 vs 0.6 etc.
+        let medianDuration = min(0.5, Float(wordDurations.sorted()[wordDurations.count / 2]))  // 0.7 vs 0.6 etc.
         let maxDuration = medianDuration * 2
 
         let sentenceEndMarks = ".。!！?？"
@@ -1450,14 +1823,17 @@ extension WhisperTokenizer {
         maxDuration: Float,
         medianDuration: Float
     ) {
-        if words[0].end - words[0].start > maxDuration || (words.count > 1 && words[1].end - words[0].start > maxDuration * 2) {
-
-            if words.count > 1 && words[1].end - words[1].start > maxDuration {
-                let boundary = max(words[1].end / 2, words[1].end - maxDuration)
-                words[0].end = boundary
-                words[1].start = boundary
-            }
+        if words[0].end - words[0].start > maxDuration {
             words[0].start = max(0, words[0].end - maxDuration)
+        }
+
+        for i in 1..<words.count {
+            let gap = words[i].start - words[i - 1].end
+
+            if words[i].end - words[i].start > maxDuration {
+                words[i].start = max(words[i - 1].end + gap, words[i].end - maxDuration)
+            }
+
         }
     }
 
@@ -1466,16 +1842,10 @@ extension WhisperTokenizer {
         words: inout [Segment.Word],
         medianDuration: Float
     ) {
-        if segment.start < words[0].end && segment.start - 0.5 > words[0].start {
-            words[0].start = max(0, min(words[0].end - medianDuration, segment.start))
-        } else {
+        if !words.isEmpty {
             segment.start = words[0].start
-        }
 
-        if let lastWord = words.last {
-            if segment.end > lastWord.start && segment.end + 0.5 < lastWord.end {
-                words[words.count - 1].end = max(lastWord.start + medianDuration, segment.end)
-            } else {
+            if let lastWord = words.last {
                 segment.end = lastWord.end
             }
         }
@@ -1610,7 +1980,7 @@ extension WhisperTokenizer {
 
 }
 
-public extension WhisperTokenizer {
+extension WhisperTokenizer {
     public struct TranscriptionSegment {
         let id: Int
         let seek: Int
@@ -1627,9 +1997,9 @@ public extension WhisperTokenizer {
 
 }
 
-public extension WhisperTokenizer {
+extension WhisperTokenizer {
 
-    func createSegmentsFromTokens(
+    public func createSegmentsFromTokens(
         tokens: [UInt32],
         tokenizer: WhisperTokenizer,
         timePrecision: Float = 0.02
