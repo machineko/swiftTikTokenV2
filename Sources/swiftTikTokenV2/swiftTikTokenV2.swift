@@ -1021,7 +1021,7 @@ extension WhisperTokenizer {
         let entropy: Float
     }
 
-    public struct Segment: CustomStringConvertible, CustomDebugStringConvertible {
+    public struct Segment: CustomStringConvertible, CustomDebugStringConvertible, Sendable {
 
         public var start: Float
         public var end: Float
@@ -1029,7 +1029,7 @@ extension WhisperTokenizer {
         public var words: [Word]
         public let seek: Int
 
-        public struct Word: CustomStringConvertible, CustomDebugStringConvertible {
+        public struct Word: CustomStringConvertible, CustomDebugStringConvertible, Sendable {
             public let word: String
             public var start: Float
             public var end: Float
@@ -1619,138 +1619,138 @@ extension WhisperTokenizer {
         let probabilities: [Float]
     }
     
-    func findWordAlignmentsv2(
-        textTokens: [Rank],
-        text_indices: [Int],
-        time_indices: [Int],
-        tokenProbabilities: [Float],
-        tokenEntropies: [Float]
-    ) throws -> [WordTiming] {
-        var tokensWithEot = textTokens
-        if let eotToken = specialTokens["<|endoftext|>"] {
-            tokensWithEot.append(eotToken)
-        }
-
-        let (words, wordTokens) = splitToWordTokens(tokensWithEot)
-
-        guard wordTokens.count > 1 else {
-            return []
-        }
-
-        var wordBoundaries = [0]
-        var cumsum = 0
-        for tokens in wordTokens.dropLast() {
-            cumsum += tokens.count
-            wordBoundaries.append(cumsum)
-        }
-
-        var jumps = [true]
-        for i in 1..<text_indices.count {
-            jumps.append(text_indices[i] != text_indices[i - 1])
-        }
-
-        let jumpTimes = zip(jumps, time_indices)
-            .filter { $0.0 }
-            .map { Float($0.1) / TOKENS_PER_SECOND }
-
-        var jumpToTokenIndex: [Int] = []
-        for (i, isJump) in jumps.enumerated() {
-            if isJump && i < text_indices.count {
-                jumpToTokenIndex.append(text_indices[i])
-            }
-        }
-
-        var jumpProbabilities: [Float] = []
-        var jumpEntropies: [Float] = []
-
-        for tokenIdx in jumpToTokenIndex {
-            if tokenIdx < tokenProbabilities.count {
-                jumpProbabilities.append(tokenProbabilities[tokenIdx])
-            }
-            if tokenIdx < tokenEntropies.count {
-                jumpEntropies.append(tokenEntropies[tokenIdx])
-            }
-        }
-
-        var startTimes: [Float] = []
-        var endTimes: [Float] = []
-        var wordProbabilities: [Float] = []
-        var wordEntropies: [Float] = []
-
-        for i in 0..<(wordBoundaries.count - 1) {
-            let wordStartToken = wordBoundaries[i]
-            let wordEndToken = wordBoundaries[i + 1]
-
-            var startJumpIdx: Int? = nil
-            var endJumpIdx: Int? = nil
-
-            for (idx, tokenIdx) in jumpToTokenIndex.enumerated() {
-                if tokenIdx <= wordStartToken {
-                    startJumpIdx = idx
-                }
-                if tokenIdx < wordEndToken {
-                    endJumpIdx = idx
-                }
-            }
-
-            if startJumpIdx == nil && !jumpToTokenIndex.isEmpty {
-                startJumpIdx = 0
-            }
-
-            guard let startIdx = startJumpIdx else {
-                continue
-            }
-
-            let actualEndIdx: Int
-            if let endIdx = endJumpIdx {
-                actualEndIdx = min(endIdx + 1, jumpTimes.count - 1)
-            } else {
-                actualEndIdx = min(startIdx + 1, jumpTimes.count - 1)
-            }
-
-            startTimes.append(jumpTimes[startIdx])
-            endTimes.append(jumpTimes[actualEndIdx])
-
-            let probStartIdx = startIdx
-            let probEndIdx = min(actualEndIdx, jumpProbabilities.count)
-
-            if probStartIdx < probEndIdx && probStartIdx < jumpProbabilities.count {
-                let tokenProbs = Array(jumpProbabilities[probStartIdx..<probEndIdx])
-                let wordProb = tokenProbs.isEmpty ? 1.0 : tokenProbs.reduce(0, +) / Float(tokenProbs.count)
-                wordProbabilities.append(wordProb)
-            } else {
-                wordProbabilities.append(1.0)
-            }
-
-            if probStartIdx < probEndIdx && probStartIdx < jumpEntropies.count {
-                let tokenEnts = Array(jumpEntropies[probStartIdx..<probEndIdx])
-                let wordEnt = tokenEnts.isEmpty ? 0.0 : tokenEnts.reduce(0, +) / Float(tokenEnts.count)
-                wordEntropies.append(wordEnt)
-            } else {
-                wordEntropies.append(0.0)
-            }
-        }
-
-        var results: [WordTiming] = []
-        for i in 0..<min(words.count, startTimes.count) {
-            guard i < endTimes.count && i < wordTokens.count &&
-                  i < wordProbabilities.count && i < wordEntropies.count else {
-                break
-            }
-
-            results.append(
-                WordTiming(
-                    word: words[i],
-                    tokens: wordTokens[i],
-                    start: startTimes[i],
-                    end: endTimes[i],
-                    probability: wordProbabilities[i],
-                    entropy: wordEntropies[i]
-                ))
-        }
-
-        return results
-    }
+//    func findWordAlignments(
+//        textTokens: [Rank],
+//        text_indices: [Int],
+//        time_indices: [Int],
+//        tokenProbabilities: [Float],
+//        tokenEntropies: [Float]
+//    ) throws -> [WordTiming] {
+//        var tokensWithEot = textTokens
+//        if let eotToken = specialTokens["<|endoftext|>"] {
+//            tokensWithEot.append(eotToken)
+//        }
+//
+//        let (words, wordTokens) = splitToWordTokens(tokensWithEot)
+//
+//        guard wordTokens.count > 1 else {
+//            return []
+//        }
+//
+//        var wordBoundaries = [0]
+//        var cumsum = 0
+//        for tokens in wordTokens.dropLast() {
+//            cumsum += tokens.count
+//            wordBoundaries.append(cumsum)
+//        }
+//
+//        var jumps = [true]
+//        for i in 1..<text_indices.count {
+//            jumps.append(text_indices[i] != text_indices[i - 1])
+//        }
+//
+//        let jumpTimes = zip(jumps, time_indices)
+//            .filter { $0.0 }
+//            .map { Float($0.1) / TOKENS_PER_SECOND }
+//
+//        var jumpToTokenIndex: [Int] = []
+//        for (i, isJump) in jumps.enumerated() {
+//            if isJump && i < text_indices.count {
+//                jumpToTokenIndex.append(text_indices[i])
+//            }
+//        }
+//
+//        var jumpProbabilities: [Float] = []
+//        var jumpEntropies: [Float] = []
+//
+//        for tokenIdx in jumpToTokenIndex {
+//            if tokenIdx < tokenProbabilities.count {
+//                jumpProbabilities.append(tokenProbabilities[tokenIdx])
+//            }
+//            if tokenIdx < tokenEntropies.count {
+//                jumpEntropies.append(tokenEntropies[tokenIdx])
+//            }
+//        }
+//
+//        var startTimes: [Float] = []
+//        var endTimes: [Float] = []
+//        var wordProbabilities: [Float] = []
+//        var wordEntropies: [Float] = []
+//
+//        for i in 0..<(wordBoundaries.count - 1) {
+//            let wordStartToken = wordBoundaries[i]
+//            let wordEndToken = wordBoundaries[i + 1]
+//
+//            var startJumpIdx: Int? = nil
+//            var endJumpIdx: Int? = nil
+//
+//            for (idx, tokenIdx) in jumpToTokenIndex.enumerated() {
+//                if tokenIdx <= wordStartToken {
+//                    startJumpIdx = idx
+//                }
+//                if tokenIdx < wordEndToken {
+//                    endJumpIdx = idx
+//                }
+//            }
+//
+//            if startJumpIdx == nil && !jumpToTokenIndex.isEmpty {
+//                startJumpIdx = 0
+//            }
+//
+//            guard let startIdx = startJumpIdx else {
+//                continue
+//            }
+//
+//            let actualEndIdx: Int
+//            if let endIdx = endJumpIdx {
+//                actualEndIdx = min(endIdx + 1, jumpTimes.count - 1)
+//            } else {
+//                actualEndIdx = min(startIdx + 1, jumpTimes.count - 1)
+//            }
+//
+//            startTimes.append(jumpTimes[startIdx])
+//            endTimes.append(jumpTimes[actualEndIdx])
+//
+//            let probStartIdx = startIdx
+//            let probEndIdx = min(actualEndIdx, jumpProbabilities.count)
+//
+//            if probStartIdx < probEndIdx && probStartIdx < jumpProbabilities.count {
+//                let tokenProbs = Array(jumpProbabilities[probStartIdx..<probEndIdx])
+//                let wordProb = tokenProbs.isEmpty ? 1.0 : tokenProbs.reduce(0, +) / Float(tokenProbs.count)
+//                wordProbabilities.append(wordProb)
+//            } else {
+//                wordProbabilities.append(1.0)
+//            }
+//
+//            if probStartIdx < probEndIdx && probStartIdx < jumpEntropies.count {
+//                let tokenEnts = Array(jumpEntropies[probStartIdx..<probEndIdx])
+//                let wordEnt = tokenEnts.isEmpty ? 0.0 : tokenEnts.reduce(0, +) / Float(tokenEnts.count)
+//                wordEntropies.append(wordEnt)
+//            } else {
+//                wordEntropies.append(0.0)
+//            }
+//        }
+//
+//        var results: [WordTiming] = []
+//        for i in 0..<min(words.count, startTimes.count) {
+//            guard i < endTimes.count && i < wordTokens.count &&
+//                  i < wordProbabilities.count && i < wordEntropies.count else {
+//                break
+//            }
+//
+//            results.append(
+//                WordTiming(
+//                    word: words[i],
+//                    tokens: wordTokens[i],
+//                    start: startTimes[i],
+//                    end: endTimes[i],
+//                    probability: wordProbabilities[i],
+//                    entropy: wordEntropies[i]
+//                ))
+//        }
+//
+//        return results
+//    }
 
 
     func findWordAlignments(
@@ -1763,10 +1763,12 @@ extension WhisperTokenizer {
         var tokensWithEot = textTokens
         if let eotToken = specialTokens["<|endoftext|>"] {
             tokensWithEot.append(eotToken)
+            tokensWithEot.insert(specialTokens["<|notimestamps|>"]!, at: 0)
         }
-
+//        if let eotToken = specialTokens["<|endoftext|>"] {
+//            tokensWithEot.append(eotToken)
+//        }
         let (words, wordTokens) = splitToWordTokens(tokensWithEot)
-
         guard wordTokens.count > 1 else {
             return []
         }
@@ -1862,14 +1864,14 @@ extension WhisperTokenizer {
         text_indices: [Int],
         time_indices: [Int],
         probabilities: [Float32],
-        tokenEntropies: [Float32]
+        tokenEntropies: [Float32],
+        pauseThreshold: Float = 0.7
     ) throws {
         guard !segments.isEmpty else { return }
 
         let textTokensPerSegment = segments.map { segment in
             segment.tokens.filter { $0 < tokenizer.eot }
         }
-
         let textTokens = Array(textTokensPerSegment.joined())
 
         var alignment = try findWordAlignments(
@@ -1879,16 +1881,17 @@ extension WhisperTokenizer {
             tokenProbabilities: probabilities,
             tokenEntropies: tokenEntropies
         )
-
+        
+        alignment = Array(alignment[1...])
         let wordDurations = alignment.map { $0.end - $0.start }
             .filter { $0 > 0 }
 
         guard !wordDurations.isEmpty else { return }
 
         let medianDuration = min(0.5, Float(wordDurations.sorted()[wordDurations.count / 2]))  // 0.7 vs 0.6 etc.
-        let maxDuration = medianDuration * 2
+        let maxDuration = medianDuration * 2.5
 
-        let sentenceEndMarks = ".。!！?？"
+        let sentenceEndMarks: [String] = ".。!！?？".map { String($0) }
         for i in 1..<alignment.count {
             if alignment[i].end - alignment[i].start > maxDuration {
                 if sentenceEndMarks.contains(alignment[i].word) {
@@ -1931,43 +1934,12 @@ extension WhisperTokenizer {
 
             if !words.isEmpty {
                 
-                adjustWordTimingsAfterPause(
-                    words: &words,
-                    maxDuration: maxDuration,
-                    medianDuration: medianDuration
-                )
-                
-                adjustSegmentBoundaries(
-                    segment: &segments[segmentIndex],
-                    words: &words,
-                    medianDuration: medianDuration
-                )
-
                 lastSpeechTimestamp = segments[segmentIndex].end
             }
 
             segments[segmentIndex].words = words
         }
     }
-
-//    private func adjustWordTimingsAfterPause(
-//        words: inout [Segment.Word],
-//        maxDuration: Float,
-//        medianDuration: Float
-//    ) {
-//        if words[0].end - words[0].start > maxDuration {
-//            words[0].start = max(0, words[0].end - maxDuration)
-//        }
-//
-//        for i in 1..<words.count {
-//            let gap = words[i].start - words[i - 1].end
-//
-//            if words[i].end - words[i].start > maxDuration {
-//                words[i].start = max(words[i - 1].end + gap, words[i].end - maxDuration)
-//            }
-//
-//        }
-//    }
 
     private func adjustWordsAfterPause(
         words: inout [Segment.Word],
@@ -1976,28 +1948,106 @@ extension WhisperTokenizer {
     ) {
         guard fromIndex < words.count else { return }
 
-        let minDuration: Float = 0.04
+        let minDuration: Float = 0.08
         let i = fromIndex
         let duration = words[i].end - words[i].start
         if duration <= minDuration { return }
-        if duration > maxDuration * 1.5 {
+        if duration >= 2.5 { return } // Fix in restart this is most likely broken word
+        if duration > maxDuration * 2 {
             words[i].start = max(
                 words[i].start,
                 words[i].end - maxDuration * 1.5,
-                words[i].start + duration / 2
+                words[i].start + duration * 0.7
+            )
+        }
+        else if duration > maxDuration * 1.5 {
+            words[i].start = max(
+                words[i].start,
+                words[i].end - maxDuration,
+                words[i].start + duration * 0.6
             )
         }
         else if duration > maxDuration {
             words[i].start = max(
                 words[i].start,
-                words[i].end - maxDuration,
-                words[i].start + duration / 2
+                words[i].end - maxDuration * 0.9,
+                words[i].start + duration * 0.55
             )
         }
         else {
             words[i].start = max(
                 words[i].start,
-                words[i].start + duration / 2
+                words[i].start + duration * 0.5
+            )
+        }
+    }
+    
+    private func adjustWordsAfterPauseLong(
+        words: inout [Segment.Word],
+        fromIndex: Int,
+        maxDuration: Float
+    ) {
+        guard fromIndex < words.count else { return }
+
+        let minDuration: Float = 0.08
+        let i = fromIndex
+        let duration = words[i].end - words[i].start
+        if duration <= minDuration { return }
+        if duration >= 2.5 { return } // Fix in restart this is most likely broken word
+        if duration > maxDuration * 2 {
+            words[i].start = max(
+                words[i].start,
+                words[i].end - maxDuration * 1.25,
+                words[i].start + duration * 0.8
+            )
+        }
+        else if duration > maxDuration * 1.5 {
+            words[i].start = max(
+                words[i].start,
+                words[i].end - maxDuration,
+                words[i].start + duration * 0.75
+            )
+        }
+        else if duration > maxDuration {
+            words[i].start = max(
+                words[i].start,
+                words[i].end - maxDuration * 0.9,
+                words[i].start + duration * 0.7
+            )
+        }
+        else {
+            words[i].start = max(
+                words[i].start,
+                words[i].start + duration * 0.65
+            )
+        }
+    }
+
+
+    
+    private func adjustLongWord(
+        words: inout [Segment.Word],
+        fromIndex: Int,
+        maxDuration: Float
+    ) {
+        guard fromIndex < words.count else { return }
+
+        let minDuration: Float = 0.08
+        let i = fromIndex
+        let duration = words[i].end - words[i].start
+        if duration <= minDuration { return }
+        if duration >= 2.5 { return } // Fix in restart this is most likely broken word
+        if duration > maxDuration * 2 {
+            words[i].start = max(
+                words[i].start,
+                words[i].end - maxDuration,
+                words[i].start + duration * 0.5
+            )
+        }
+        else {
+            words[i].start = max(
+                words[i].start,
+                words[i].start + duration * 0.25
             )
         }
     }
@@ -2006,11 +2056,10 @@ extension WhisperTokenizer {
     private func adjustWordTimingsAfterPause(
         words: inout [Segment.Word],
         maxDuration: Float,
-        medianDuration: Float
+        medianDuration: Float,
+        pauseThreshold: Float
     ) {
         guard words.count > 1 else { return }
-
-        let pauseThreshold: Float = 0.5
         var i = 1
 
         while i < words.count {
@@ -2020,19 +2069,27 @@ extension WhisperTokenizer {
 
             let gap = currentWord.start - prevWord.end
             let isPause = gap >= pauseThreshold
-            let isTooLong = currentWord.end - currentWord.start > maxDuration
+            let isTooLong = (currentWord.end - currentWord.start) > maxDuration
             if isPause {
-                print ("pause, \(currentWord.start), \(currentWord.end), \(prevWord.start), \(prevWord.end), \(currentWord.word), \(prevWord.word)")
-                adjustWordsAfterPause(
-                    words: &words,
-                    fromIndex: i,
-                    maxDuration: maxDuration
-                )
+                print ("pause, \(currentWord.start), \(currentWord.end), \(currentWord.word)")
+                if gap >= 1 {
+                    adjustWordsAfterPauseLong(words: &words,
+                                              fromIndex: i,
+                                              maxDuration: maxDuration)
+                }
+                else {
+                    adjustWordsAfterPause(
+                        words: &words,
+                        fromIndex: i,
+                        maxDuration: maxDuration
+                    )
+                }
+
 
             }
             else if isTooLong {
-                print ("too long, \(currentWord.start), \(currentWord.end), \(prevWord.start), \(prevWord.end), \(currentWord.word), \(prevWord.word)")
-                adjustWordsAfterPause(
+                print ("too long, \(currentWord.start), \(currentWord.end), \(currentWord.word)")
+                adjustLongWord(
                     words: &words,
                     fromIndex: i,
                     maxDuration: maxDuration
@@ -2238,13 +2295,13 @@ extension WhisperTokenizer {
                     let lastToken = slicedTokens.last
                 else { continue }
 
-                let startTimestampPos = firstToken - tokenizer.timestampBegin
-                let endTimestampPos = lastToken - tokenizer.timestampBegin
+//                let startTimestampPos = firstToken - tokenizer.timestampBegin
+//                let endTimestampPos = lastToken - tokenizer.timestampBegin
 
                 currentSegments.append(
                     Segment(
-                        start: timeOffset + Float(startTimestampPos) * timePrecision,
-                        end: timeOffset + Float(endTimestampPos) * timePrecision,
+                        start: 0,
+                        end: 0,
                         tokens: slicedTokens,
                         words: [],
                         seek: seek
