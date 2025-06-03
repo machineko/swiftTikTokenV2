@@ -1881,7 +1881,7 @@ extension WhisperTokenizer {
             tokenProbabilities: probabilities,
             tokenEntropies: tokenEntropies
         )
-        
+        if alignment.isEmpty { return }
         alignment = Array(alignment[1...])
         let wordDurations = alignment.map { $0.end - $0.start }
             .filter { $0 > 0 }
@@ -1889,7 +1889,7 @@ extension WhisperTokenizer {
         guard !wordDurations.isEmpty else { return }
 
         let medianDuration = min(0.5, Float(wordDurations.sorted()[wordDurations.count / 2]))  // 0.7 vs 0.6 etc.
-        let maxDuration = medianDuration * 2.5
+        let maxDuration = medianDuration * 2.3
 
         let sentenceEndMarks: [String] = ".。!！?？".map { String($0) }
         for i in 1..<alignment.count {
@@ -1933,7 +1933,6 @@ extension WhisperTokenizer {
             }
 
             if !words.isEmpty {
-                
                 lastSpeechTimestamp = segments[segmentIndex].end
             }
 
