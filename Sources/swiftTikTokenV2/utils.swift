@@ -5,9 +5,9 @@ import Metal
 import MetalPerformanceShaders
 
 struct ComplexHalf {
-    var real: Float16
-    var imag: Float16
-    var mag: Float16
+    var real: Float
+    var imag: Float
+    var mag: Float
 
     static func size() -> Int {
         return MemoryLayout<ComplexHalf>.stride
