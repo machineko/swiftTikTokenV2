@@ -4,7 +4,12 @@ import Foundation
 import Metal
 import MetalPerformanceShaders
 
-struct ComplexHalf {
+#if arch(x86_64)
+    public typealias Float16 = UInt16
+#endif
+
+public struct ComplexHalf {
+
     var real: Float16
     var imag: Float16
     var mag: Float16
