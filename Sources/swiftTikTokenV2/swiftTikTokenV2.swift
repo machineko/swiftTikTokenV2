@@ -1255,10 +1255,10 @@ extension WhisperTokenizer {
         tokenEntropies: [Float]  // Token entropies from Whisper
     ) throws -> [WordTiming] {
         var tokensWithEot = textTokens
-        if let eotToken = specialTokens["<|endoftext|>"] {
-            tokensWithEot.append(eotToken)
-            tokensWithEot.insert(specialTokens["<|notimestamps|>"]!, at: 0)
-        }
+//        if let eotToken = specialTokens["<|endoftext|>"] {
+//            tokensWithEot.append(eotToken)
+////            tokensWithEot.insert(specialTokens["<|notimestamps|>"]!, at: 0)
+//        }
         let (words, wordTokens) = splitToWordTokens(tokensWithEot)
         guard wordTokens.count > 1 else {
             return []
@@ -1345,6 +1345,8 @@ extension WhisperTokenizer {
 
         return results
     }
+    
+    
 
     public func processSegments(
         segments: inout [Segment],
@@ -1362,6 +1364,7 @@ extension WhisperTokenizer {
 
         let textTokensPerSegment = segments.map { segment in
             segment.tokens.filter { $0 < tokenizer.eot }
+//            segment.tokens
         }
         let textTokens = Array(textTokensPerSegment.joined())
 
@@ -1373,7 +1376,7 @@ extension WhisperTokenizer {
             tokenEntropies: tokenEntropies
         )
         if alignment.isEmpty { return }
-        alignment = Array(alignment[1...])
+//        alignment = Array(alignment[1...])
         let wordDurations = alignment.map { $0.end - $0.start }
             .filter { $0 > 0 }
 

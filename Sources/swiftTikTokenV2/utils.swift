@@ -69,42 +69,116 @@ public enum DTWError: Error {
     case invalidDimensions
     case encoderCreationFailed
 }
+//    func backtrace(trace: [Float], N: Int, M: Int) -> (text_indices: [Int], time_indices: [Int]) {
+//        var i = N
+//        var j = M
+//
+//        var mutableTrace = trace
+//        for idx in 0...M {
+//            mutableTrace[idx] = 2
+//        }
+//        for idx in 0...N {
+//            mutableTrace[idx * (M + 1)] = 1
+//        }
+//
+//        var textIndices: [Int] = []
+//        var timeIndices: [Int] = []
+//
+//        while i > 0 || j > 0 {
+//            let traceValue = mutableTrace[i * (M + 1) + j]
+//
+//            textIndices.append(i - 1)
+//            timeIndices.append(j - 1)
+//
+//            switch traceValue {
+//            case 0:
+//                i -= 1
+//                j -= 1
+//            case 1:
+//                i -= 1
+//            case 2:
+//                j -= 1
+//            default:
+//                fatalError("Unexpected trace value: \(traceValue)")
+//            }
+//        }
+//
+//        return (textIndices.reversed(), timeIndices.reversed())
+//    }
+//public func dtw(input: MTLBuffer, N: Int, M: Int) -> (text_indices: [Int], time_indices: [Int]) {
+//    let inputPtr = input.contents().bindMemory(to: Float32.self, capacity: input.length / MemoryLayout<Float32>.stride)
+//
+//    var cost = [Float32](repeating: Float32.infinity, count: (N + 1) * (M + 1))
+//    var trace = [Float32](repeating: -1, count: (N + 1) * (M + 1))
+//
+//    cost[0] = 0
+//
+//    for j in 1...M {
+//        for i in 1...N {
+//            let c0 = cost[(i - 1) * (M + 1) + (j - 1)]  // diagonal
+//            let c1 = cost[(i - 1) * (M + 1) + j]  // vertical
+//            let c2 = cost[i * (M + 1) + (j - 1)]  // horizontal
+//
+//            let currentCost = inputPtr[(i - 1) * M + (j - 1)]
+//
+//            let (c, t): (Float32, Float32)
+//            if c0 <= c1 && c0 <= c2 {
+//                c = c0
+//                t = 0
+//            } else if c1 <= c2 {
+//                c = c1
+//                t = 1
+//            } else {
+//                c = c2
+//                t = 2
+//            }
+//
+//            cost[i * (M + 1) + j] = currentCost + c
+//            trace[i * (M + 1) + j] = t
+//        }
+//    }
+//
+//    return backtrace(trace: trace, N: N, M: M)
+//}
 
 public struct DTW {
     public init() {
 
     }
+    
     func backtrace(trace: [Float], N: Int, M: Int) -> (text_indices: [Int], time_indices: [Int]) {
         var i = N
         var j = M
 
         var mutableTrace = trace
-        for idx in 0...M {
-            mutableTrace[idx] = 2
-        }
-        for idx in 0...N {
-            mutableTrace[idx * (M + 1)] = 1
-        }
 
+        
         var textIndices: [Int] = []
         var timeIndices: [Int] = []
 
-        while i > 0 || j > 0 {
+        // Corrected loop condition: from || to &&
+        while i > 0 && j > 0 {
+            // Because of the loop condition, i and j will always be > 0 here.
+            // This prevents appending -1.
             let traceValue = mutableTrace[i * (M + 1) + j]
 
             textIndices.append(i - 1)
             timeIndices.append(j - 1)
 
             switch traceValue {
-            case 0:
+            case 0: // Diagonal move
                 i -= 1
                 j -= 1
-            case 1:
+            case 1: // Vertical move
                 i -= 1
-            case 2:
+            case 2: // Horizontal move
                 j -= 1
             default:
-                fatalError("Unexpected trace value: \(traceValue)")
+                // If you hit this, it means the path is broken. It's good to know.
+                // However, a valid path from a correct DTW forward pass shouldn't fail.
+                // To be robust, you could stop here.
+                i = 0 // Force loop termination
+                j = 0
             }
         }
 
@@ -119,12 +193,19 @@ public struct DTW {
 
         cost[0] = 0
 
+      
+        for j in 1...M {
+            cost[j] = 0
+            trace[j] = 2 // horizontal
+        }
+
         for j in 1...M {
             for i in 1...N {
                 let c0 = cost[(i - 1) * (M + 1) + (j - 1)]  // diagonal
-                let c1 = cost[(i - 1) * (M + 1) + j]  // vertical
-                let c2 = cost[i * (M + 1) + (j - 1)]  // horizontal
+                let c1 = cost[(i - 1) * (M + 1) + j]        // vertical
+                let c2 = cost[i * (M + 1) + (j - 1)]        // horizontal
 
+                // The cost of aligning token `i-1` with audio frame `j-1`
                 let currentCost = inputPtr[(i - 1) * M + (j - 1)]
 
                 let (c, t): (Float32, Float32)
@@ -146,6 +227,7 @@ public struct DTW {
 
         return backtrace(trace: trace, N: N, M: M)
     }
+
 
 }
 
