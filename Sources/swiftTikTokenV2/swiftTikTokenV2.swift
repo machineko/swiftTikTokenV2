@@ -1436,10 +1436,12 @@ extension WhisperTokenizer {
 
             if !words.isEmpty {
                 adjustWordsAfterPauseLong(words: &words, fromIndex: 0, maxDuration: maxDuration)
+                adjustLongWord(words: &words, fromIndex: 0, maxDuration: maxDuration)
+
                 adjustWordTimingsAfterPause(
                    words: &words,
                    maxDuration: maxDuration,
-                   medianDuration: medianDuration, pauseThreshold: 1.5
+                   medianDuration: medianDuration, pauseThreshold: 0.45
                )
                                
                 
