@@ -1435,6 +1435,13 @@ extension WhisperTokenizer {
             }
 
             if !words.isEmpty {
+                adjustWordTimingsAfterPause(
+                   words: &words,
+                   maxDuration: maxDuration,
+                   medianDuration: medianDuration, pauseThreshold: 1.5
+               )
+                               
+                
                 lastSpeechTimestamp = segments[segmentIndex].end
             }
 
