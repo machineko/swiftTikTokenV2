@@ -1062,6 +1062,14 @@ extension WhisperTokenizer {
             }
             return result
         }
+        
+        public init(start: Float, end: Float, tokens: [Rank], words: [Word], seek: Int) {
+            self.start = start
+            self.end = end
+            self.tokens = tokens
+            self.words = words
+            self.seek = seek
+        }
     }
 
     public func addWordTimestamps(
