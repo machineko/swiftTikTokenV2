@@ -1435,6 +1435,7 @@ extension WhisperTokenizer {
             }
 
             if !words.isEmpty {
+                adjustWordsAfterPauseLong(words: &words, fromIndex: 0, maxDuration: maxDuration)
                 adjustWordTimingsAfterPause(
                    words: &words,
                    maxDuration: maxDuration,
