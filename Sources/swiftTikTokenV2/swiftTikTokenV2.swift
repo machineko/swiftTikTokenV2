@@ -1254,8 +1254,123 @@ extension WhisperTokenizer {
     }
     
 
+    enum AlignmentError: Error {
+        case pathLengthMismatch
+        case probabilityLengthMismatch(expected: Int, got: Int)
+        case entropyLengthMismatch(expected: Int, got: Int)
+    }
 
     func findWordAlignments(
+        textTokens: [Rank],
+        text_indices: [Int],   // DTW text path (same length as time_indices)
+        time_indices: [Int],   // DTW time path (per-step)
+        tokenProbabilities: [Float],  // either per-token OR per-time-step
+        tokenEntropies: [Float]       // either per-token OR per-time-step
+    ) throws -> [WordTiming] {
+
+        var tokensWithEOT = textTokens
+        if let eot = specialTokens["<|endoftext|>"], tokensWithEOT.last != eot {
+            tokensWithEOT.append(eot)
+        }
+
+        let (words, wordTokens) = splitToWordTokens(tokensWithEOT)
+        guard wordTokens.count > 1 else { return [] }
+
+        var wordBoundaries = [0]
+        for group in wordTokens.dropLast() {
+            wordBoundaries.append(wordBoundaries.last! + group.count)
+        }
+        let totalTokens = wordBoundaries.last!
+
+        guard text_indices.count == time_indices.count else {
+            throw AlignmentError.pathLengthMismatch
+        }
+
+        var jumps = [Bool](repeating: false, count: text_indices.count)
+        if !jumps.isEmpty {
+            jumps[0] = true
+            for i in 1..<text_indices.count {
+                jumps[i] = (text_indices[i] != text_indices[i - 1])
+            }
+        }
+
+        // 5) Per-jump times
+        var jumpTimes: [Float] = []
+        jumpTimes.reserveCapacity(jumps.count)
+        for (i, t) in time_indices.enumerated() where jumps[i] {
+            jumpTimes.append(Float(t) / TOKENS_PER_SECOND)
+        }
+
+        let jumpCount = jumpTimes.count
+
+        let jumpProbabilities: [Float]
+        if tokenProbabilities.count == time_indices.count {
+            var tmp: [Float] = []
+            tmp.reserveCapacity(jumpCount)
+            for (i, p) in tokenProbabilities.enumerated() where jumps[i] { tmp.append(p) }
+            jumpProbabilities = tmp
+        } else if tokenProbabilities.count == jumpCount || tokenProbabilities.count == totalTokens {
+            jumpProbabilities = tokenProbabilities
+        } else {
+            throw AlignmentError.probabilityLengthMismatch(expected: max(jumpCount, totalTokens),
+                                                           got: tokenProbabilities.count)
+        }
+
+        let jumpEntropies: [Float]
+        if tokenEntropies.count == time_indices.count {
+            var tmp: [Float] = []
+            tmp.reserveCapacity(jumpCount)
+            for (i, e) in tokenEntropies.enumerated() where jumps[i] { tmp.append(e) }
+            jumpEntropies = tmp
+        } else if tokenEntropies.count == jumpCount || tokenEntropies.count == totalTokens {
+            jumpEntropies = tokenEntropies
+        } else {
+            throw AlignmentError.entropyLengthMismatch(expected: max(jumpCount, totalTokens),
+                                                       got: tokenEntropies.count)
+        }
+
+        // 7) Ensure an end boundary exists for the last word (EOT fix)
+        // We index end times with wordBoundaries[1:], whose last value == totalTokens.
+        // We need jumpTimes.count >= totalTokens + 1.
+        if jumpTimes.count <= totalTokens {
+            let endSec = Float(time_indices.last ?? 0) / TOKENS_PER_SECOND
+            jumpTimes.append(endSec)
+        }
+
+        var results: [WordTiming] = []
+        results.reserveCapacity(words.count)
+
+        let numWords = min(words.count, wordTokens.count - 1) // exclude EOT group
+        for w in 0..<numWords {
+            let i = wordBoundaries[w]
+            let j = wordBoundaries[w + 1]
+
+            if j >= jumpTimes.count { break }
+            if j > jumpProbabilities.count || j > jumpEntropies.count { break }
+
+            let start = jumpTimes[i]
+            let end   = jumpTimes[j]
+
+            let probSlice = jumpProbabilities[i..<j]
+            let entSlice  = jumpEntropies[i..<j]
+
+            let meanProb = probSlice.isEmpty ? 1.0 : probSlice.reduce(0, +) / Float(probSlice.count)
+            let meanEnt  = entSlice.isEmpty  ? 0.0 : entSlice.reduce(0, +) / Float(entSlice.count)
+
+            results.append(WordTiming(
+                word: words[w],
+                tokens: wordTokens[w],
+                start: start,
+                end: end,
+                probability: meanProb,
+                entropy: meanEnt
+            ))
+        }
+
+        return results
+    }
+    
+    func findWordAlignmentsOld(
         textTokens: [Rank],
         text_indices: [Int],
         time_indices: [Int],
@@ -1263,10 +1378,10 @@ extension WhisperTokenizer {
         tokenEntropies: [Float]  // Token entropies from Whisper
     ) throws -> [WordTiming] {
         var tokensWithEot = textTokens
-//        if let eotToken = specialTokens["<|endoftext|>"] {
-//            tokensWithEot.append(eotToken)
-////            tokensWithEot.insert(specialTokens["<|notimestamps|>"]!, at: 0)
-//        }
+        if let eotToken = specialTokens["<|endoftext|>"] {
+            tokensWithEot.append(eotToken)
+//            tokensWithEot.insert(specialTokens["<|notimestamps|>"]!, at: 0)
+        }
         let (words, wordTokens) = splitToWordTokens(tokensWithEot)
         guard wordTokens.count > 1 else {
             return []
